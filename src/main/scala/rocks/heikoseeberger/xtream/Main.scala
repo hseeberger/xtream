@@ -55,7 +55,9 @@ object Main extends Logging {
         implicit val untypedSystem: UntypedSystem = context.system.toUntyped
         implicit val mat: Materializer            = ActorMaterializer()(context.system)
 
-        Api(config.api, TextShuffler(config.textShuffler))
+        val wordShufflerSink = WordShuffler.runProcess()
+
+        Api(config.api, TextShuffler(config.textShuffler, wordShufflerSink))
 
         Behaviors.empty
       }

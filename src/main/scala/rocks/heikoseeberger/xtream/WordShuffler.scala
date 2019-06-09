@@ -16,20 +16,28 @@
 
 package rocks.heikoseeberger.xtream
 
-import akka.stream.scaladsl.Flow
+import akka.NotUsed
+import akka.stream.Materializer
+import akka.stream.scaladsl.{ FlowWithContext, MergeHub, Sink }
 import scala.annotation.tailrec
 import scala.util.Random
 
 object WordShuffler {
 
-  type Process = Flow[ShuffleWord, WordShuffled, Any]
+  type Process =
+    FlowWithContext[ShuffleWord, Respondee[WordShuffled], WordShuffled, Respondee[WordShuffled], Any]
 
   final case class ShuffleWord(text: String)
   final case class WordShuffled(text: String)
 
   def apply(): Process =
-    Flow[ShuffleWord]
+    FlowWithContext[ShuffleWord, Respondee[WordShuffled]]
       .map { case ShuffleWord(word) => WordShuffled(shuffleWord(word)) }
+
+  def runProcess()(
+      implicit mat: Materializer
+  ): Sink[(ShuffleWord, Respondee[WordShuffled]), NotUsed] =
+    ???
 
   def shuffleWord(word: String): String = {
     @tailrec def loop(word: String, acc: String = ""): String =

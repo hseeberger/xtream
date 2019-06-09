@@ -16,6 +16,7 @@
 
 package rocks.heikoseeberger
 
+import akka.actor.typed.ActorRef
 import akka.stream.DelayOverflowStrategy
 import akka.stream.scaladsl.FlowWithContext
 import scala.concurrent.duration.FiniteDuration
@@ -26,6 +27,8 @@ package object xtream {
   type Iterable[+A]    = scala.collection.immutable.Iterable[A]
   type Seq[+A]         = scala.collection.immutable.Seq[A]
   type IndexedSeq[+A]  = scala.collection.immutable.IndexedSeq[A]
+
+  type Respondee[A] = ActorRef[Respondee.Response[A]]
 
   final implicit class FlowWithContextExt[In, CtxIn, Out, CtxOut](
       val flowWithContext: FlowWithContext[In, CtxIn, Out, CtxOut, Any]
