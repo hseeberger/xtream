@@ -16,31 +16,68 @@
 
 package rocks.heikoseeberger.xtream
 
-import akka.NotUsed
-import akka.stream.Materializer
-import akka.stream.scaladsl.{ FlowWithContext, MergeHub, Sink }
+import akka.{ Done, NotUsed }
+import akka.actor.typed.{ ActorRef, Behavior }
+import akka.actor.typed.scaladsl.Behaviors
+import akka.stream.{ KillSwitches, Materializer, SinkRef, UniqueKillSwitch }
+import akka.stream.scaladsl.{ FlowWithContext, Keep, MergeHub, Sink, StreamRefs }
+import akka.stream.typed.scaladsl.ActorMaterializer
+import org.apache.logging.log4j.scala.Logging
 import scala.annotation.tailrec
-import scala.util.Random
+import scala.concurrent.{ ExecutionContext, Future }
+import scala.util.{ Failure, Random, Success }
 
-object WordShuffler {
+object WordShuffler extends Logging {
 
   type Process =
     FlowWithContext[ShuffleWord, Respondee[WordShuffled], WordShuffled, Respondee[WordShuffled], Any]
 
+  sealed trait Command
+  final case class GetSinkRef(replyTo: ActorRef[SinkRef[(ShuffleWord, Respondee[WordShuffled])]])
+      extends Command
+  final case object Shutdown     extends Command
+  private final case object Stop extends Command
+
   final case class ShuffleWord(text: String)
   final case class WordShuffled(text: String)
 
-  def apply(): Process =
+  def apply(): Behavior[Command] =
+    Behaviors.setup { context =>
+      implicit val mat: Materializer    = ActorMaterializer()(context.system)
+      implicit val ec: ExecutionContext = context.executionContext
+      val self                          = context.self
+      val (sink, switch, done)          = runProcess()
+
+      done.onComplete { reason =>
+        logger.warn(s"Process completed: $reason")
+        self ! Stop // Probably better to run the process again!
+      }
+
+      Behaviors.receiveMessagePartial {
+        case GetSinkRef(replyTo) =>
+          ???
+          Behaviors.same
+
+        case Shutdown =>
+          switch.shutdown()
+          Behaviors.receiveMessagePartial { case Stop => Behaviors.stopped }
+      }
+    }
+
+  def process(): Process =
     FlowWithContext[ShuffleWord, Respondee[WordShuffled]]
       .map { case ShuffleWord(word) => WordShuffled(shuffleWord(word)) }
 
   def runProcess()(
       implicit mat: Materializer
-  ): Sink[(ShuffleWord, Respondee[WordShuffled]), NotUsed] =
+  ): (Sink[(ShuffleWord, Respondee[WordShuffled]), NotUsed], UniqueKillSwitch, Future[Done]) =
     MergeHub
       .source[(ShuffleWord, Respondee[WordShuffled])](1)
-      .via(WordShuffler())
-      .to(Sink.foreach { case (wordShuffled, r) => r ! Respondee.Response(wordShuffled) })
+      .viaMat(???)(Keep.both)
+      .via(process())
+      .toMat(Sink.foreach { case (wordShuffled, r) => r ! Respondee.Response(wordShuffled) }) {
+        ???
+      }
       .run()
 
   def shuffleWord(word: String): String = {

@@ -20,7 +20,14 @@ import akka.actor.{ ActorSystem => UntypedSystem }
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.scaladsl.adapter.{ TypedActorSystemOps, _ }
-import akka.cluster.typed.{ Cluster, SelfUp, Subscribe, Unsubscribe }
+import akka.cluster.typed.{
+  Cluster,
+  ClusterSingleton,
+  SelfUp,
+  SingletonActor,
+  Subscribe,
+  Unsubscribe
+}
 import akka.stream.Materializer
 import akka.stream.typed.scaladsl.ActorMaterializer
 import org.apache.logging.log4j.core.async.AsyncLoggerContextSelector
@@ -55,9 +62,12 @@ object Main extends Logging {
         implicit val untypedSystem: UntypedSystem = context.system.toUntyped
         implicit val mat: Materializer            = ActorMaterializer()(context.system)
 
-        val wordShufflerSink = WordShuffler.runProcess()
+        val wordShuffler =
+          ClusterSingleton(context.system).init(
+            SingletonActor(WordShuffler(), "word-shuffler").withStopMessage(WordShuffler.Shutdown)
+          )
 
-        Api(config.api, TextShuffler(config.textShuffler, wordShufflerSink))
+        Api(config.api, TextShuffler(config.textShuffler, wordShuffler))
 
         Behaviors.empty
       }
