@@ -55,7 +55,14 @@ object WordShuffler extends Logging {
 
       Behaviors.receiveMessagePartial {
         case GetSinkRef(replyTo) =>
-          ???
+          StreamRefs
+            .sinkRef()
+            .to(sink)
+            .run()
+            .onComplete {
+              case Success(sinkRef) => replyTo ! sinkRef
+              case Failure(cause)   => logger.error("Cannot create GetTripExecutionSinkRef!", cause)
+            }
           Behaviors.same
 
         case Shutdown =>
@@ -73,10 +80,10 @@ object WordShuffler extends Logging {
   ): (Sink[(ShuffleWord, Respondee[WordShuffled]), NotUsed], UniqueKillSwitch, Future[Done]) =
     MergeHub
       .source[(ShuffleWord, Respondee[WordShuffled])](1)
-      .viaMat(???)(Keep.both)
+      .viaMat(KillSwitches.single)(Keep.both)
       .via(process())
       .toMat(Sink.foreach { case (wordShuffled, r) => r ! Respondee.Response(wordShuffled) }) {
-        ???
+        case ((sink, switch), done) => (sink, switch, done)
       }
       .run()
 

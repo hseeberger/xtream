@@ -53,7 +53,9 @@ object TextShuffler {
         .recoverWith { case _ => wordShufflerSinkRef() }
 
     val wordShufflerSink =
-      ???
+      RestartSink.withBackoff(wordShufflerAskTimeout, wordShufflerAskTimeout, 0) { () =>
+        Await.result(wordShufflerSinkRef().map(_.sink), wordShufflerAskTimeout) // Hopefully we can get rid of blocking soon: https://github.com/akka/akka/issues/25934
+      }
 
     FlowWithContext[ShuffleText, Promise[TextShuffled]]
       .delay(delay, DelayOverflowStrategy.backpressure)
