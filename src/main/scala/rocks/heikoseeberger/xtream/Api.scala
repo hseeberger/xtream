@@ -55,7 +55,12 @@ object Api extends Logging {
     val shutdown                      = CoordinatedShutdown(untypedSystem)
 
     val textShufflerProcessor =
-      ???
+      Source
+        .queue[(ShuffleText, Promise[TextShuffled])](1, OverflowStrategy.dropNew)
+        .via(textShuffler)
+        .to(Sink.foreach { case (textShuffled, p) => p.trySuccess(textShuffled) })
+        .withAttributes(ActorAttributes.supervisionStrategy(Supervision.resumingDecider))
+        .run()
 
     Http()
       .bindAndHandle(route(config), hostname, port)
@@ -83,7 +88,13 @@ object Api extends Logging {
           parameter("text") { text =>
             val promisedTextShuffled = ExpiringPromise[TextShuffled](processorTimeout)
             val shuffledText =
-              ???
+              textShufflerProcessor
+                .offer((ShuffleText(text), promisedTextShuffled))
+                .flatMap {
+                  case Enqueued => promisedTextShuffled.future.map(_.text)
+                  case Dropped  => Future.failed(ProcessorUnavailable("textShufflerProcessor"))
+                  case other    => Future.failed(ProcessorError(other))
+                }
             complete(shuffledText)
           }
         }
