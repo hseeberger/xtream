@@ -37,7 +37,11 @@ object WordShuffler {
   def runProcess()(
       implicit mat: Materializer
   ): Sink[(ShuffleWord, Respondee[WordShuffled]), NotUsed] =
-    ???
+    MergeHub
+      .source[(ShuffleWord, Respondee[WordShuffled])](1)
+      .via(WordShuffler())
+      .to(Sink.foreach { case (wordShuffled, r) => r ! Respondee.Response(wordShuffled) })
+      .run()
 
   def shuffleWord(word: String): String = {
     @tailrec def loop(word: String, acc: String = ""): String =

@@ -50,8 +50,19 @@ object TextShuffler {
             .map(ShuffleWord)
             // .into(wordShufflerSink)
             .map { shuffleWord =>
-              ??? : WordShuffled
+              val promisedWordShuffled = Promise[WordShuffled]()
+              val respondee =
+                untypedSystem.spawnAnonymous(
+                  Respondee[WordShuffled](promisedWordShuffled, wordShufflerProcessTimeout)
+                )
+              (shuffleWord, promisedWordShuffled, respondee)
             }
+            .alsoTo {
+              Flow[(ShuffleWord, Promise[WordShuffled], Respondee[WordShuffled])]
+                .map { case (shuffleWord, _, r) => (shuffleWord, r) }
+                .to(wordShufflerSink)
+            }
+            .mapAsync(42) { case (_, p, _) => p.future }
             .map(_.text)
             .runWith(Sink.seq)
       }
