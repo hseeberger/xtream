@@ -17,30 +17,48 @@
 package rocks.heikoseeberger.xtream
 
 import akka.Done
-import akka.actor.{ CoordinatedShutdown, ActorSystem => UntypedSystem }
+import akka.actor.{ CoordinatedShutdown, Scheduler, ActorSystem => UntypedSystem }
 import akka.actor.CoordinatedShutdown.{ PhaseServiceRequestsDone, PhaseServiceUnbind, Reason }
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
-import akka.stream.Materializer
+import akka.stream.{ ActorAttributes, Materializer, OverflowStrategy, Supervision }
+import akka.stream.scaladsl.{ Sink, Source }
+import akka.stream.QueueOfferResult.{ Dropped, Enqueued }
 import org.apache.logging.log4j.scala.Logging
-import rocks.heikoseeberger.xtream.TextShuffler.ShuffleText
+import rocks.heikoseeberger.xtream.Processor.{
+  ProcessorError,
+  ProcessorUnavailable,
+  processorUnavailableHandler
+}
+import rocks.heikoseeberger.xtream.TextShuffler.{ ShuffleText, TextShuffled }
+import scala.concurrent.{ Future, Promise }
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Failure, Success }
 
 object Api extends Logging {
 
-  final case class Config(hostname: String, port: Int, terminationDeadline: FiniteDuration)
+  final case class Config(hostname: String,
+                          port: Int,
+                          terminationDeadline: FiniteDuration,
+                          processorTimeout: FiniteDuration)
 
   final object BindFailure extends Reason
 
-  def apply(config: Config)(implicit untypedSystem: UntypedSystem, mat: Materializer): Unit = {
+  def apply(
+      config: Config,
+      textShuffler: TextShuffler.Process
+  )(implicit untypedSystem: UntypedSystem, mat: Materializer): Unit = {
     import config._
     import untypedSystem.dispatcher
 
-    val shutdown = CoordinatedShutdown(untypedSystem)
+    implicit val scheduler: Scheduler = untypedSystem.scheduler
+    val shutdown                      = CoordinatedShutdown(untypedSystem)
+
+    val textShufflerProcessor =
+      ???
 
     Http()
-      .bindAndHandle(route, hostname, port)
+      .bindAndHandle(route(config), hostname, port)
       .onComplete {
         case Failure(cause) =>
           logger.error(s"Shutting down, because cannot bind to $hostname:$port!", cause)
@@ -56,13 +74,16 @@ object Api extends Logging {
           }
       }
 
-    def route: Route = {
+    def route(config: Config)(implicit scheduler: Scheduler): Route = {
       import akka.http.scaladsl.server.Directives._
+      import config._
 
       path("shuffle-text") {
         get {
           parameter("text") { text =>
-            val shuffledText = TextShuffler.singleRequest(ShuffleText(text)).map(_.text)
+            val promisedTextShuffled = ExpiringPromise[TextShuffled](processorTimeout)
+            val shuffledText =
+              ???
             complete(shuffledText)
           }
         }

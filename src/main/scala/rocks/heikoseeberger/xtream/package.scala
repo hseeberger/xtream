@@ -16,10 +16,23 @@
 
 package rocks.heikoseeberger
 
+import akka.stream.DelayOverflowStrategy
+import akka.stream.scaladsl.FlowWithContext
+import scala.concurrent.duration.FiniteDuration
+
 package object xtream {
 
   type Traversable[+A] = scala.collection.immutable.Traversable[A]
   type Iterable[+A]    = scala.collection.immutable.Iterable[A]
   type Seq[+A]         = scala.collection.immutable.Seq[A]
   type IndexedSeq[+A]  = scala.collection.immutable.IndexedSeq[A]
+
+  final implicit class FlowWithContextExt[In, CtxIn, Out, CtxOut](
+      val flowWithContext: FlowWithContext[In, CtxIn, Out, CtxOut, Any]
+  ) extends AnyVal {
+
+    def delay(of: FiniteDuration,
+              strategy: DelayOverflowStrategy): FlowWithContext[In, CtxIn, Out, CtxOut, Any] =
+      FlowWithContext.fromTuples(flowWithContext.asFlow.delay(of, strategy))
+  }
 }

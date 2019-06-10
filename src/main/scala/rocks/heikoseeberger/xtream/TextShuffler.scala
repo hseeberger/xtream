@@ -17,14 +17,15 @@
 package rocks.heikoseeberger.xtream
 
 import akka.stream.{ Attributes, DelayOverflowStrategy, Materializer }
-import akka.stream.scaladsl.{ Flow, Sink, Source }
+import akka.stream.scaladsl.{ FlowWithContext, Sink, Source }
 import rocks.heikoseeberger.xtream.WordShuffler.ShuffleWord
-import scala.concurrent.duration.{ DurationInt, FiniteDuration }
-import scala.concurrent.Future
+import scala.concurrent.Promise
+import scala.concurrent.duration.FiniteDuration
 
 object TextShuffler {
 
-  type Process = Flow[ShuffleText, TextShuffled, Any]
+  type Process =
+    FlowWithContext[ShuffleText, Promise[TextShuffled], TextShuffled, Promise[TextShuffled], Any]
 
   final case class ShuffleText(text: String)
   final case class TextShuffled(text: String)
@@ -33,7 +34,7 @@ object TextShuffler {
 
   def apply(config: Config)(implicit mat: Materializer): Process = {
     import config._
-    Flow[ShuffleText]
+    FlowWithContext[ShuffleText, Promise[TextShuffled]]
       .delay(delay, DelayOverflowStrategy.backpressure)
       .withAttributes(Attributes.inputBuffer(1, 1))
       .mapAsync(42) {
@@ -47,10 +48,4 @@ object TextShuffler {
       }
       .map(words => TextShuffled(words.mkString(" ")))
   }
-
-  def singleRequest(shuffleText: ShuffleText)(implicit mat: Materializer): Future[TextShuffled] =
-    Source
-      .single(shuffleText)
-      .via(TextShuffler(Config(2.seconds)))
-      .runWith(Sink.head)
 }

@@ -30,7 +30,7 @@ import pureconfig.loadConfigOrThrow
 
 object Main extends Logging {
 
-  private final case class Config(api: Api.Config)
+  private final case class Config(api: Api.Config, textShuffler: TextShuffler.Config)
 
   def main(args: Array[String]): Unit = {
     sys.props += "log4j2.contextSelector" -> classOf[AsyncLoggerContextSelector].getName // Always use async logging!
@@ -55,7 +55,7 @@ object Main extends Logging {
         implicit val untypedSystem: UntypedSystem = context.system.toUntyped
         implicit val mat: Materializer            = ActorMaterializer()(context.system)
 
-        Api(config.api)
+        Api(config.api, TextShuffler(config.textShuffler))
 
         Behaviors.empty
       }
